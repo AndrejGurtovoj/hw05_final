@@ -1,0 +1,37 @@
+{% extends 'base.html' %}
+{% block title %}Избранные авторы{% endblock %}
+{% block content %}
+{% load thumbnail%}
+
+
+  <h1>Посты избранного автора</h1>
+  
+  {% include 'posts/includes/switcher.html' %}
+  {% for post in page_obj %}
+  <article>
+    <ul>
+      <li>
+        Автор: {{ post.author }}
+        <a href="{% url 'posts:profile' post.author.username %}">Все посты пользователя</a>
+      </li>
+      <li>
+        Дата публикации: {{ post.pub_date|date:"d E Y" }}
+      </li>
+    </ul>
+    {% if post.image %}
+    {% thumbnail post.image "300x300" crop="center" upscale=True as im %}
+      <img class="card-img my-2" src="{{ im.url }}">
+    {% endthumbnail %}
+    {% endif %}      
+    <p>{{post.text}}</p>
+    <article>
+    <a href="{% url 'posts:post_detail' post.pk %}">Подробная Информация</a>
+    </article>
+    {% if post.group %}
+    <a href="{% url 'posts:group_list' post.group.slug %}">Все записи группы</a>
+    {% endif %}
+  </article>
+{% if not forloop.last %}<hr>{% endif %}
+{% endfor %}
+{% include 'posts/includes/paginator.html' %}
+{% endblock %}
