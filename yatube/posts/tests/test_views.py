@@ -198,22 +198,6 @@ class PostViewsTests(TestCase):
                 self.assertEqual(response.context.get(
                     'page_obj')[0], self.post)
 
-    def test_comment_post_auth_user(self):
-        comment = Comment.objects.create(
-            text='Коментарий', author=self.user, post_id=self.post.id)
-        response = (self.client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id})))
-        response = (self.client.get(
-            reverse('posts:post_detail', kwargs={'post_id': self.post.id})))
-        self.assertContains(response, comment)
-        self.client.logout()
-        response = (self.client.post(
-            reverse('posts:add_comment', kwargs={'post_id': self.post.id})))
-        self.assertRedirects(response, reverse(
-            'users:login') + '?next=' + reverse(
-                'posts:add_comment',
-            kwargs={'post_id': self.post.id}))
-
     def test_group_post(self):
         """ Проверка на ошибочное попадание поста не в ту группу. """
         response = self.authorized_client.get(
@@ -223,6 +207,61 @@ class PostViewsTests(TestCase):
             )
         )
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
+
+
+class CommentsTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='test_user')
+        cls.new_post = Post.objects.create(
+            text='test_text',
+            author_id=cls.user.id
+        )
+
+    def setUp(self):
+        self.guest = Client()
+        self.authenticated_user = Client()
+        self.authenticated_user.force_login(CommentsTest.user)
+
+    def test_comment_create(self):
+        """Проверка создания комментария и редиректа"""
+        context = {'text': 'test_comment'}
+        response = self.authenticated_user.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': CommentsTest.new_post.id}),
+            data=context,
+            follow=True
+        )
+        new_comment = Comment.objects.filter(text='test_comment')
+        self.assertTrue(new_comment.exists())
+        self.assertRedirects(response, reverse(
+            'posts:post_detail',
+            kwargs={'post_id': CommentsTest.new_post.id})
+        )
+        new_response = self.authenticated_user.get(
+            reverse(
+                'posts:post_detail',
+                kwargs={'post_id': CommentsTest.new_post.id}
+            )
+        )
+        comment = new_response.context.get('comments')
+        self.assertEqual(list(new_comment), list(comment))
+
+    def test_guest_comment_create(self):
+        """Проверка создания комментария неавторзированным пользователем"""
+        response = self.guest.post(
+            reverse(
+                'posts:add_comment',
+                kwargs={'post_id': CommentsTest.new_post.id},
+            ),
+            data={'text': 'second_comment'},
+            follow=True
+        )
+        self.assertRedirects(response, ('/auth/login/?next=/posts/1/comment/'))
+        comment = Comment.objects.filter(text='second_comment')
+        self.assertFalse(comment.exists())
 
 
 class FollowTest(TestCase):
