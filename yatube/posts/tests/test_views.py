@@ -86,15 +86,15 @@ class PostViewsTests(TestCase):
 
     def test_cache_index(self):
         """Тест кэш index"""
-        get_index = self.authorized_client.get(reverse('posts:index'))
-        post4cache = Post.objects.get(pk=1)
-        post4cache.text = 'Кеш текст'
-        post4cache.save()
+        response = self.authorized_client.get(reverse('posts:index'))
+        post_cache = Post.objects.get(pk=1)
+        post_cache.text = 'Кеш текст'
+        post_cache.save()
         test1 = self.authorized_client.get(reverse('posts:index'))
-        self.assertEqual(get_index.content, test1.content)
+        self.assertEqual(response.content, test1.content)
         cache.clear()
         test2 = self.authorized_client.get(reverse('posts:index'))
-        self.assertNotEqual(get_index.content, test2.content)
+        self.assertNotEqual(response.content, test2.content)
 
     def test_pages_uses_correct_template(self):
         """URL-адрес использует соответствующий шаблон."""
@@ -225,6 +225,54 @@ class PostViewsTests(TestCase):
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
 
 
+class FollowTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user_follower = User.objects.create_user(username='follower')
+        cls.user_following = User.objects.create_user(username='following')
+        cls.post = Post.objects.create(
+            text='Пробный текст',
+            author=cls.user_following,
+        )
+        cls.follow = Follow.objects.create(user=cls.user_follower,
+                                           author=cls.user_following)
+
+    def setUp(self):
+        self.authorized_client_follower = Client()
+        self.authorized_client_following = Client()
+        self.authorized_client_follower.force_login(
+            FollowTest.user_follower)
+        self.authorized_client_following.force_login(
+            FollowTest.user_following)
+
+    def test_follow(self):
+        """Проверяем что пользователь может подписаться."""
+        self.authorized_client_follower.get(
+            reverse('posts:profile_follow',
+                    args=(self.user_following.username,)))
+        self.assertEqual(Follow.objects.all().count(), 1)
+
+    def test_unfollow(self):
+        """Проверяем что пользователь может отписаться."""
+        self.authorized_client_follower.get(
+            reverse('posts:profile_follow', kwargs={
+                'username': self.user_following.username
+            }))
+        self.authorized_client_follower.get(
+            reverse('posts:profile_unfollow', kwargs={
+                'username': self.user_following.username
+            }))
+        self.assertEqual(Follow.objects.all().count(), 0)
+
+    def test_authors_posts_appear_on_subscribers_page(self):
+        """Пост автора появляется на странице подписчиков."""
+        response = self.authorized_client_follower.get(
+            reverse('posts:follow_index'))
+        post_text = response.context["page_obj"][0].text
+        self.assertEqual(post_text, FollowTest.post.text)
+
+
 class PiginatorViewsTest(TestCase):
     @classmethod
     def setUpClass(cls):
@@ -258,23 +306,3 @@ class PiginatorViewsTest(TestCase):
             with self.subTest(templates=templates[num]):
                 response = self.authorized_client.get(templates[num])
                 self.assertEqual(len(response.context['page_obj']), NUM_POSTS)
-
-    def test_profile_follow(self):
-        """Проверяем что пользователь может подписаться."""
-        follow_count = Follow.objects.count()
-        username = self.user.username
-        self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': username}
-        ))
-        self.assertEqual(Follow.objects.count(), follow_count)
-
-    def test_profile_unfollow(self):
-        """Проверяем что пользователь может отписаться."""
-        follow_count = Follow.objects.count()
-        username = self.user.username
-        self.authorized_client.get(reverse(
-            'posts:profile_unfollow',
-            kwargs={'username': username}
-        ))
-        self.assertEqual(Follow.objects.count(), follow_count)
