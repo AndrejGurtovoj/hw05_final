@@ -209,107 +209,106 @@ class PostViewsTests(TestCase):
         self.assertEqual(response.context['page_obj'].paginator.count, 0)
 
 
-class CommentsTest(TestCase):
+class CommentTest(TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        cls.user = User.objects.create_user(username='test_user')
-        cls.new_post = Post.objects.create(
-            text='test_text',
-            author_id=cls.user.id
-        )
-
-    def setUp(self):
-        self.guest = Client()
-        self.authenticated_user = Client()
-        self.authenticated_user.force_login(CommentsTest.user)
-
-    def test_comment_create(self):
-        """Проверка создания комментария и редиректа"""
-        context = {'text': 'test_comment'}
-        response = self.authenticated_user.post(
-            reverse(
-                'posts:add_comment',
-                kwargs={'post_id': CommentsTest.new_post.id}),
-            data=context,
-            follow=True
-        )
-        new_comment = Comment.objects.filter(text='test_comment')
-        self.assertTrue(new_comment.exists())
-        self.assertRedirects(response, reverse(
-            'posts:post_detail',
-            kwargs={'post_id': CommentsTest.new_post.id})
-        )
-        new_response = self.authenticated_user.get(
-            reverse(
-                'posts:post_detail',
-                kwargs={'post_id': CommentsTest.new_post.id}
-            )
-        )
-        comment = new_response.context.get('comments')
-        self.assertEqual(list(new_comment), list(comment))
-
-    def test_guest_comment_create(self):
-        """Проверка создания комментария неавторзированным пользователем"""
-        response = self.guest.post(
-            reverse(
-                'posts:add_comment',
-                kwargs={'post_id': CommentsTest.new_post.id},
-            ),
-            data={'text': 'second_comment'},
-            follow=True
-        )
-        self.assertRedirects(response, ('/auth/login/?next=/posts/1/comment/'))
-        comment = Comment.objects.filter(text='second_comment')
-        self.assertFalse(comment.exists())
-
-
-class FollowTest(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls.user_follower = User.objects.create_user(username='follower')
-        cls.user_following = User.objects.create_user(username='following')
+        cls.user = User.objects.create_user(username='user')
+        cls.author = User.objects.create_user(username='author')
         cls.post = Post.objects.create(
-            text='Пробный текст',
-            author=cls.user_following,
+            author=cls.author,
+            text='Текст поста',
         )
-        cls.follow = Follow.objects.create(user=cls.user_follower,
-                                           author=cls.user_following)
 
     def setUp(self):
-        self.authorized_client_follower = Client()
-        self.authorized_client_following = Client()
-        self.authorized_client_follower.force_login(
-            FollowTest.user_follower)
-        self.authorized_client_following.force_login(
-            FollowTest.user_following)
+        self.guest_client = Client()
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
 
-    def test_follow(self):
+    def test_comment_create_user(self):
+        """Проверяем создание комментария пользователем в БД."""
+        count_comment = Comment.objects.count()
+        form_data = {'text': 'Тестовый комментарий'}
+        response = self.authorized_client.post(
+            reverse('posts:add_comment', kwargs={'post_id': self.post.pk}),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(response, reverse(
+            'posts:post_detail', kwargs={'post_id': self.post.pk}))
+        self.assertEqual(Comment.objects.count(), count_comment + 1)
+
+    def test_comment_create_guest(self):
+        """Проверка создания комментария неавторзированным пользователем"""
+        count_comment = Comment.objects.count()
+        form_data = {'text': 'Тестовый комментарий'}
+        response = self.guest_client.post(
+            reverse('posts:add_comment', kwargs={'post_id': self.post.pk}),
+            data=form_data,
+            follow=True
+        )
+        self.assertRedirects(response, f'/auth/login/?next=/posts/'
+                                       f'{self.post.id}/comment/')
+        self.assertEqual(Comment.objects.count(), count_comment)
+
+
+class FollowViewTest(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        super().setUpClass()
+        cls.user = User.objects.create_user(username='user')
+        cls.author = User.objects.create_user(username='author')
+        cls.group = Group.objects.create(
+            title='Тестовая группа',
+            slug='test-slug',
+            description='Тестовое описание',
+        )
+        cls.post = Post.objects.create(
+            author=cls.author,
+            text='Текст поста',
+            group=cls.group,
+        )
+
+    def setUp(self):
+
+        self.guest_client = Client()
+        self.authorized_client = Client()
+        self.authorized_client.force_login(self.user)
+        self.author_client = Client()
+        self.author_client.force_login(self.author)
+
+        cache.clear()
+
+    def test_authorized_user_follow(self):
         """Проверяем что пользователь может подписаться."""
-        self.authorized_client_follower.get(
-            reverse('posts:profile_follow',
-                    args=(self.user_following.username,)))
-        self.assertEqual(Follow.objects.all().count(), 1)
+        self.authorized_client.post(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.author.username}
+        ))
+        follow_obj = Follow.objects.get(author=self.author, user=self.user)
+        self.assertIsNotNone(follow_obj, + 1)
 
-    def test_unfollow(self):
+    def test_authorized_user_unfollow(self):
         """Проверяем что пользователь может отписаться."""
-        self.authorized_client_follower.get(
-            reverse('posts:profile_follow', kwargs={
-                'username': self.user_following.username
-            }))
-        self.authorized_client_follower.get(
-            reverse('posts:profile_unfollow', kwargs={
-                'username': self.user_following.username
-            }))
+        self.authorized_client.post(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.author.username}
+        ))
+        self.authorized_client.post(reverse(
+            'posts:profile_unfollow',
+            kwargs={'username': self.author.username}
+        ))
         self.assertEqual(Follow.objects.all().count(), 0)
 
-    def test_authors_posts_appear_on_subscribers_page(self):
+    def test_following_posts_showing_to_followers(self):
         """Пост автора появляется на странице подписчиков."""
-        response = self.authorized_client_follower.get(
-            reverse('posts:follow_index'))
-        post_text = response.context["page_obj"][0].text
-        self.assertEqual(post_text, FollowTest.post.text)
+        self.authorized_client.get(reverse(
+            'posts:profile_follow',
+            kwargs={'username': self.author.username}
+        ))
+        response = self.authorized_client.get(reverse('posts:follow_index'))
+        following_post = response.context['page_obj'][0].text
+        self.assertEqual(following_post, self.post.text)
 
 
 class PiginatorViewsTest(TestCase):
