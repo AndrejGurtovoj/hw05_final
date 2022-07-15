@@ -301,7 +301,7 @@ class FollowViewTest(TestCase):
         self.assertEqual(Follow.objects.all().count(), 0)
 
     def test_following_posts_showing_to_followers(self):
-        """Пост автора появляется на странице подписчиков."""
+        """Проверяем что пост появляется в ленте у тех, кто подписан."""
         self.authorized_client.get(reverse(
             'posts:profile_follow',
             kwargs={'username': self.author.username}
@@ -309,6 +309,19 @@ class FollowViewTest(TestCase):
         response = self.authorized_client.get(reverse('posts:follow_index'))
         following_post = response.context['page_obj'][0].text
         self.assertEqual(following_post, self.post.text)
+
+    def test_no_following_posts_showing_to_followers(self):
+        """Проверяем что пост не появляется в ленте у тех, кто
+        не подписан."""
+        posts = Post.objects.filter(author=self.user).count()
+        Post.objects.create(
+            author=self.author,
+            text='Тестовый пост',
+            group=self.group,
+        )
+        response = self.authorized_client.get(reverse('posts:follow_index'))
+        following_post = len(response.context['page_obj'])
+        self.assertEqual(following_post, posts, self.post.text)
 
 
 class PiginatorViewsTest(TestCase):
