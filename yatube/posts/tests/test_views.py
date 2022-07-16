@@ -281,24 +281,24 @@ class FollowViewTest(TestCase):
 
     def test_authorized_user_follow(self):
         """Проверяем что пользователь может подписаться."""
-        self.authorized_client.post(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.author.username}
-        ))
-        follow_obj = Follow.objects.get(author=self.author, user=self.user)
-        self.assertIsNotNone(follow_obj, + 1)
+        self.authorized_client.get(
+            reverse('posts:profile_follow', kwargs={'username': self.author}))
+        self.assertTrue(Follow.objects.filter(
+            user=self.user,
+            author=self.author,
+        ).exists())
 
     def test_authorized_user_unfollow(self):
         """Проверяем что пользователь может отписаться."""
-        self.authorized_client.post(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.author.username}
-        ))
-        self.authorized_client.post(reverse(
-            'posts:profile_unfollow',
-            kwargs={'username': self.author.username}
-        ))
-        self.assertEqual(Follow.objects.all().count(), 0)
+        self.authorized_client.get(
+            reverse(
+                'posts:profile_unfollow',
+                kwargs={'username': self.author}
+            ))
+        self.assertFalse(Follow.objects.filter(
+            user=self.user,
+            author=self.author,
+        ).exists())
 
     def test_following_posts_showing_to_followers(self):
         """Проверяем что пост появляется в ленте у тех, кто подписан."""
@@ -313,15 +313,11 @@ class FollowViewTest(TestCase):
     def test_no_following_posts_showing_to_followers(self):
         """Проверяем что пост не появляется в ленте у тех, кто
         не подписан."""
-        posts = Post.objects.filter(author=self.user).count()
-        Post.objects.create(
-            author=self.author,
-            text='Тестовый пост',
-            group=self.group,
-        )
-        response = self.authorized_client.get(reverse('posts:follow_index'))
-        following_post = len(response.context['page_obj'])
-        self.assertEqual(following_post, posts, self.post.text)
+        response = self.authorized_client.get(reverse(
+            'posts:follow_index'
+        ))
+        post = Post.objects.get(id=self.post.pk)
+        self.assertNotIn(post, response.context['page_obj'])
 
 
 class PiginatorViewsTest(TestCase):
