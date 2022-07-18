@@ -290,18 +290,24 @@ class FollowViewTest(TestCase):
 
     def test_authorized_user_unfollow(self):
         """Проверяем что пользователь может отписаться."""
-        self.authorized_client.get(
-            reverse(
-                'posts:profile_unfollow',
-                kwargs={'username': self.author}
-            ))
-        self.assertFalse(Follow.objects.filter(
-            user=self.user,
-            author=self.author,
-        ).exists())
+        self.authorized_client.post(
+            reverse('posts:profile_follow',
+                    kwargs={'username': self.user.username}),
+            follow=True
+        )
+        self.authorized_client.post(
+            reverse('posts:profile_unfollow',
+                    kwargs={'username': self.user.username}),
+            follow=True
+        )
+        self.assertFalse(
+            Follow.objects.filter(user=self.user,
+                                  author=self.author).exists()
+        )
 
     def test_following_posts_showing_to_followers(self):
         """Проверяем что пост появляется в ленте у тех, кто подписан."""
+        Follow.objects.create(user=self.user, author=self.author)
         self.authorized_client.get(reverse(
             'posts:profile_follow',
             kwargs={'username': self.author.username}
