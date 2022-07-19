@@ -308,10 +308,6 @@ class FollowViewTest(TestCase):
     def test_following_posts_showing_to_followers(self):
         """Проверяем что пост появляется в ленте у тех, кто подписан."""
         Follow.objects.create(user=self.user, author=self.author)
-        self.authorized_client.get(reverse(
-            'posts:profile_follow',
-            kwargs={'username': self.author.username}
-        ))
         response = self.authorized_client.get(reverse('posts:follow_index'))
         following_post = response.context['page_obj'][0].text
         self.assertEqual(following_post, self.post.text)
