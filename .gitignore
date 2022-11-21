@@ -144,6 +144,9 @@ dmypy.json
 .history/
 
 .mypy_cache
+<<<<<<< HEAD
 
 
 
+=======
+>>>>>>> 889a8cc02a127a92b300830b0023c0466fd7169c
